@@ -10,6 +10,71 @@ function fmt(v) {
   return (Math.abs(v - Math.round(v)) < 1e-9) ? `${Math.round(v)}` : `${v.toFixed(2).replace('.', ',')}`
 }
 
+// Highlighted students helpers (stored by name in localStorage)
+function getHighlightedNames() {
+  try {
+    return JSON.parse(localStorage.getItem('notasUPV_highlighted') || '[]')
+  } catch (e) {
+    return []
+  }
+}
+
+function setHighlightedNames(arr) {
+  localStorage.setItem('notasUPV_highlighted', JSON.stringify(Array.from(new Set(arr))))
+}
+
+function isHighlighted(name) {
+  if (!name) return false
+  const arr = getHighlightedNames()
+  return arr.includes(name.trim())
+}
+
+function setHighlight(name, enabled) {
+  if (!name) return
+  const arr = getHighlightedNames()
+  const n = name.trim()
+  const idx = arr.indexOf(n)
+  if (enabled && idx === -1) {
+    arr.push(n)
+  } else if (!enabled && idx !== -1) {
+    arr.splice(idx, 1)
+  }
+  setHighlightedNames(arr)
+}
+
+
+
+function applyAllHighlights() {
+  const highlighted = getHighlightedNames()
+  trs.forEach(tr => {
+    try {
+      const tds = tr.querySelectorAll('td')
+      let name = ''
+      if (tds.length >= 3) {
+        name = tds[1]?.textContent?.trim() || ''
+      } else if (tds.length >= 1) {
+        name = tds[0]?.textContent?.trim() || ''
+      }
+
+      const isH = name && highlighted.includes(name)
+
+      // Update checkbox state if present
+      const cb = tr.querySelector('input[type="checkbox"]')
+      if (cb) cb.checked = !!isH
+
+      if (isH) {
+        tr.style.backgroundColor = '#e8f5e9'
+        tr.style.fontWeight = 'bold'
+      } else {
+        tr.style.backgroundColor = ''
+        tr.style.fontWeight = ''
+      }
+    } catch (e) {
+      // ignore
+    }
+  })
+}
+
 if (isMainPage) {
   const userNameElement = document.querySelector('a[name="panel_155"]')
   if (userNameElement) {
@@ -28,31 +93,141 @@ if (isMainPage) {
 function getElements() {
   let sorted_elements = trs.map(tr => {
     let tds = tr.querySelectorAll('td')
-    let name = tds[0].textContent
-    let mark = tds[1].textContent.replace(',', '.')
+    // Support both original (name, mark) and new (checkbox, name, mark) layouts
+    let name = tds.length >= 3 ? tds[1].textContent : tds[0].textContent
+    let mark = tds.length >= 3 ? tds[2].textContent.replace(',', '.') : tds[1].textContent.replace(',', '.')
     mark = mark.startsWith('.') ? '0' + mark : mark
 
-    return { name, mark }
+    return { name: name.trim(), mark }
   })
 
   let elements = [...sorted_elements]
-  sorted_elements.sort((a, b) => b.mark - a.mark || b.name - a.name)
+  sorted_elements.sort((a, b) => b.mark - a.mark || a.name.localeCompare(b.name))
 
   return { elements, sorted_elements }
 }
 
+// Ensure table has header with empty, Nombre, Nota columns
+function ensureTableHeader() {
+  if (!table) return
+  let headerRow = null
+  const thead = table.querySelector('thead')
+  if (thead) headerRow = thead.querySelector('tr')
+  if (!headerRow) {
+    const th = table.querySelector('tr th')
+    if (th) headerRow = th.closest('tr')
+  }
+  if (!headerRow) {
+    const theadEl = document.createElement('thead')
+    headerRow = document.createElement('tr')
+    theadEl.appendChild(headerRow)
+    table.insertBefore(theadEl, table.firstChild)
+  }
+
+  const existing = [...headerRow.children].map(c => (c.textContent || '').trim().toLowerCase())
+
+  // Determine if we need adjusted column
+  const stats = (typeof getStats === 'function') ? getStats() : null
+  const needAdjusted = stats && stats.highestPossible && stats.highestPossible !== 10
+
+  // If header already looks like Name column present
+  if (existing[1] && existing[1].includes('nombre')) {
+    // ensure adjusted column exists if needed
+    const hasAdjusted = existing.some(t => t.includes('ajustada') || t.includes('ajust'))
+    if (needAdjusted && !hasAdjusted) {
+      const adjTh = document.createElement('th')
+      adjTh.textContent = 'Nota ajustada'
+      headerRow.appendChild(adjTh)
+    }
+    return
+  }
+
+  while (headerRow.firstChild) headerRow.removeChild(headerRow.firstChild)
+
+  const emptyTh = document.createElement('th')
+  emptyTh.textContent = ''
+  const nameTh = document.createElement('th')
+  nameTh.textContent = 'Nombre'
+  const notaTh = document.createElement('th')
+  notaTh.textContent = 'Nota'
+
+  // Set widths: narrow checkbox, wider note columns
+  emptyTh.style.width = '48px'
+  emptyTh.style.textAlign = 'center'
+  notaTh.style.width = '96px'
+  notaTh.style.textAlign = 'center'
+
+  headerRow.appendChild(emptyTh)
+  headerRow.appendChild(nameTh)
+  headerRow.appendChild(notaTh)
+
+  if (needAdjusted) {
+    const adjTh = document.createElement('th')
+    adjTh.textContent = 'Nota ajustada'
+    adjTh.style.width = '96px'
+    adjTh.style.textAlign = 'center'
+    headerRow.appendChild(adjTh)
+  }
+}
+
 function changeTable(elements) {
+  const stats = getStats()
+  const hp = stats.highestPossible
+  const needsAdjusted = hp && hp !== 10
+
   trs.forEach((tr, i) => {
-    let name_td = document.createElement('td')
+    const name_td = document.createElement('td')
     name_td.classList.add('alignleft')
     name_td.textContent = elements[i].name
 
-    let mark_td = document.createElement('td')
+    const mark_td = document.createElement('td')
     mark_td.classList.add('alignleft')
     mark_td.textContent = elements[i].mark.toString().replace('.', ',')
 
-    tr.replaceChildren(name_td, mark_td)
+    // Add a checkbox column to toggle highlight (narrow)
+    const checkbox_td = document.createElement('td')
+    checkbox_td.classList.add('alignleft')
+    checkbox_td.style.width = '48px'
+    checkbox_td.style.textAlign = 'center'
+    const cb = document.createElement('input')
+    cb.type = 'checkbox'
+    cb.title = 'Resaltar alumno'
+    cb.checked = isHighlighted(elements[i].name)
+    cb.addEventListener('change', function () {
+      setHighlight(elements[i].name, this.checked)
+      applyAllHighlights()
+    })
+    checkbox_td.appendChild(cb)
+
+    // Ensure nota column has fixed width and centered
+    mark_td.style.width = '96px'
+    mark_td.style.textAlign = 'center'
+
+    // Adjusted grade column (scale to 10) with same width as Nota
+    if (needsAdjusted) {
+      const adjusted_td = document.createElement('td')
+      adjusted_td.classList.add('alignleft')
+      adjusted_td.style.width = '96px'
+      adjusted_td.style.textAlign = 'center'
+      const raw = parseFloat(elements[i].mark)
+      adjusted_td.textContent = isNaN(raw) ? '' : fmt((raw / hp) * 10)
+      tr.replaceChildren(checkbox_td, name_td, mark_td, adjusted_td)
+    } else {
+      tr.replaceChildren(checkbox_td, name_td, mark_td)
+    }
+
+    // Apply highlight styling if this student is highlighted (also handled in applyAllHighlights)
+    if (cb.checked) {
+      tr.style.backgroundColor = '#e8f5e9'
+      tr.style.fontWeight = 'bold'
+    } else {
+      tr.style.backgroundColor = ''
+      tr.style.fontWeight = ''
+    }
   })
+
+  // Ensure checkboxes and highlights are in sync
+  applyAllHighlights()
 }
 
 function getStats() {
@@ -235,6 +410,9 @@ function setupNotasUPVElement() {
 
   const bellCurveGraph = createBellCurveGraph(stats)
 
+  const total = stats.total || 0
+  const pct = n => total ? Math.round((n / total) * 100) : 0
+
   let notasUPVElement = document.createElement('span')
   notasUPVElement.innerHTML = `
     <div style="text-align: center; margin-bottom: 12px; padding: 12px 24px; background: #f9f9f9; display:flex; flex-direction:row; align-items:center; justify-content:space-between; gap:20px;">
@@ -247,15 +425,15 @@ function setupNotasUPVElement() {
           <div style="font-size: 0.8em; color: #999;">Media</div>
         </div>
         <div style="text-align: center;">
-          <div style="font-size: 1.3em; font-weight: bold; color: #f44336;">${stats.underPass}</div>
+          <div style="display:flex; align-items:center; justify-content:center;"><div style="font-size:1.3em; font-weight:bold; color:#f44336;">${stats.underPass}</div><div style="font-size:1.1em; color:#999; margin-left:6px;"> (${pct(stats.underPass)}%)</div></div>
           <div style="font-size: 0.8em; color: #999;">Suspensos (&lt; ${fmt(stats.passThreshold)})</div>
         </div>
         <div style="text-align: center;">
-          <div style="font-size: 1.3em; font-weight: bold; color: #2196F3;">${stats.mid}</div>
+          <div style="display:flex; align-items:center; justify-content:center;"><div style="font-size:1.3em; font-weight:bold; color:#2196F3;">${stats.mid}</div><div style="font-size:1.1em; color:#999; margin-left:6px;"> (${pct(stats.mid)}%)</div></div>
           <div style="font-size: 0.8em; color: #999;">Aprobados (${fmt(stats.passThreshold)} - ${fmt(stats.sobresalienteThreshold)})</div>
         </div>
         <div style="text-align: center;">
-          <div style="font-size: 1.3em; font-weight: bold; color: #4CAF50;">${stats.overSob}</div>
+          <div style="display:flex; align-items:center; justify-content:center;"><div style="font-size:1.3em; font-weight:bold; color:#4CAF50;">${stats.overSob}</div><div style="font-size:1.1em; color:#999; margin-left:6px;"> (${pct(stats.overSob)}%)</div></div>
           <div style="font-size: 0.8em; color: #999;">Sobresalientes (≥ ${fmt(stats.sobresalienteThreshold)})</div>
         </div>
       </div>
@@ -267,7 +445,8 @@ function setupNotasUPVElement() {
           <input type="checkbox" checked style="margin-left: 6px; transform: scale(1.2); cursor: pointer;">
         </label>
         <div style="display:flex; gap:8px; align-items:center;">
-          <button id="notas-upv-download" style="padding:6px 10px; border-radius:4px; border:1px solid #ddd; background:#fff; cursor:pointer; font-size:0.95em;">Descargar JSON</button>
+          <button id="notas-upv-uncheck" style="padding:6px 10px; border-radius:4px; border:1px solid #ddd; background:#fff; cursor:pointer; font-size:0.95em; margin-right:6px;">Desmarcar todo</button>
+          <button id="notas-upv-download" style="padding:6px 10px; border-radius:4px; border:1px solid #758761; background:#758761; color:white; cursor:pointer; font-size:0.95em;">Descargar JSON</button>
         </div>
       </div>
     `;
@@ -277,6 +456,14 @@ function setupNotasUPVElement() {
   notasUPVElement.querySelector('input').addEventListener('change', function () {
     this.checked ? changeTable(sorted_elements) : changeTable(elements)
   })
+
+  const uncheckBtn = notasUPVElement.querySelector('#notas-upv-uncheck')
+  if (uncheckBtn) {
+    uncheckBtn.addEventListener('click', function () {
+      setHighlightedNames([])
+      applyAllHighlights()
+    })
+  }
 
   const downloadBtn = notasUPVElement.querySelector('#notas-upv-download')
   if (downloadBtn) {
@@ -300,6 +487,7 @@ function modifyCSS() {
 
 function initGradesPage() {
   modifyCSS()
+  ensureTableHeader()
   setupNotasUPVElement()
   changeTable(sorted_elements)
 }
