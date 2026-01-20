@@ -1,5 +1,5 @@
 // Check if on main page to save user name
-const isMainPage = window.location.href.includes('sic_menu.Alumno')
+const isMainPage = window.location.href.includes('sic_menu.alumno')
 
 let table, trs, elements, sorted_elements, userName
 

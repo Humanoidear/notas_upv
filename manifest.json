@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Notas UPV Extended",
-  "version": "1.0",
+  "version": "1.1",
   "description": "Adaptación de la extensión 'UPV Notas' de Chrome para Firefox con estadísticas y gráficas.",
   "icons": {
     "48": "icons/upv-48.png"
@@ -10,17 +10,16 @@
     {
       "matches": [
         "*://intranet.upv.es/pls/soalu/sic_asi.listado_notas_asi*",
-        "*://intranet.upv.es/pls/soalu/sic_menu.Alumno*"
+        "*://intranet.upv.es/pls/soalu/sic_menu.alumno*"
       ],
       "js": ["prettify_marks.js"]
     }
   ],
   "browser_specific_settings": {
-  "gecko": {
-    "data_collection_permissions": {
-      "required": ["websiteContent"]
+    "gecko": {
+      "data_collection_permissions": {
+        "required": ["websiteContent"]
+      }
     }
   }
 }
-}
-
