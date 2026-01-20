@@ -1,8 +1,8 @@
 {
   "manifest_version": 2,
-  "name": "Notas UPV",
-  "version": "1.2",
-  "description": "Adaptación de la extensión 'UPV Notas' de Chrome para Firefox. Esta extensión mejora la visualización de las calificaciones en el apartado de notas de la Intranet de la UPV.",
+  "name": "Notas UPV Extended",
+  "version": "1.0",
+  "description": "Adaptación de la extensión 'UPV Notas' de Chrome para Firefox con estadísticas y gráficas.",
   "icons": {
     "48": "icons/upv-48.png"
   },
@@ -14,5 +14,13 @@
       ],
       "js": ["prettify_marks.js"]
     }
-  ]
+  ],
+  "browser_specific_settings": {
+  "gecko": {
+    "data_collection_permissions": {
+      "required": ["websiteContent"]
+    }
+  }
 }
+}
+
